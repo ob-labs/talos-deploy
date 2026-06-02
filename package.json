@@ -1,0 +1,20 @@
+{
+  "name": "talos-deployment",
+  "version": "0.2.0",
+  "private": true,
+  "scripts": {
+    "dev:portal": "npm run dev --workspace=server",
+    "dev:cli": "npm run dev --workspace=cli",
+    "build": "npm run build --workspaces",
+    "build:portal": "npm run build --workspace=server",
+    "build:cli": "npm run build --workspace=cli",
+    "k3d": "./scripts/k3d-infra.sh",
+    "k3d:down": "./scripts/k3d-down.sh",
+    "k3d:rebuild": "./scripts/dev-rebuild.sh",
+    "deploy": "./scripts/deploy.sh"
+  },
+  "workspaces": [
+    "server",
+    "cli"
+  ]
+}

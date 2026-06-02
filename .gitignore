@@ -1,0 +1,36 @@
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Claude Code
+.claude/
+.agents/
+
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Node
+node_modules/
+dist/
+server/dist/
+
+# Go
+sandbox-manager/bin/
+
+# Docker
+*.tar
+
+# Temp
+tmp/
+*.tmp
+*.log
+sandbox-manager/sandbox-manager

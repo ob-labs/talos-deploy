@@ -1,0 +1,60 @@
+apiVersion: extensions.agents.x-k8s.io/v1alpha1
+kind: SandboxTemplate
+metadata:
+  name: claude-workspace
+  namespace: sandbox-workspaces
+spec:
+  # Allow SandboxClaim to inject env vars (e.g. per-user API key)
+  envVarsInjectionPolicy: Allowed
+  networkPolicyManagement: Unmanaged
+  podTemplate:
+    metadata:
+      labels:
+        app: claude-workspace
+    spec:
+      dnsPolicy: ClusterFirst
+      containers:
+        - name: dev
+          image: talos-registry:5000/claude-workspace:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+            - |
+              sudo ssh-keygen -A
+              echo "nameserver 10.43.0.10" | sudo tee /etc/resolv.conf
+              echo "search sandbox-workspaces.svc.cluster.local svc.cluster.local cluster.local" | sudo tee -a /etc/resolv.conf
+              cat <<ENVEOF | sudo tee /etc/profile.d/claude-env.sh
+              export ANTHROPIC_BASE_URL=$ANTHROPIC_BASE_URL
+              export ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY
+              ENVEOF
+              grep -q profile.d /home/coder/.bashrc || echo 'source /etc/profile.d/claude-env.sh' >> /home/coder/.bashrc
+              sudo /usr/sbin/sshd -De
+          env:
+            - name: ANTHROPIC_BASE_URL
+              value: "http://new-api.system.svc.cluster.local:3000"
+          resources:
+            requests:
+              cpu: "2"
+              memory: "4Gi"
+            limits:
+              cpu: "4"
+              memory: "8Gi"
+          volumeMounts:
+            - name: home
+              mountPath: /home/coder
+            - name: projects
+              mountPath: /home/coder/projects
+  volumeClaimTemplates:
+    - metadata:
+        name: home
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests: { storage: 10Gi }
+    - metadata:
+        name: projects
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests: { storage: 50Gi }

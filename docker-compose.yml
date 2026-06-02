@@ -1,0 +1,38 @@
+services:
+  portal:
+    build: ./server
+    ports:
+      - "${PORTAL_PORT:-3080}:8080"
+    environment:
+      - JWT_SECRET=dev-secret-change-me
+      - SANDBOX_MANAGER_URL=http://sandbox-manager:8081
+      - NEWAPI_BASE=http://new-api:3000
+      - ADMIN_EMAIL=admin@talos.dev
+      - ADMIN_PASSWORD=admin
+      - SANDBOX_NAMESPACE=sandbox-workspaces
+      - SANDBOX_TEMPLATE=claude-workspace
+    volumes:
+      - portal-data:/app/data
+      - new-api-data:/data/new-api:ro
+    depends_on:
+      - sandbox-manager
+
+  sandbox-manager:
+    build: ./sandbox-manager
+    environment:
+      - SANDBOX_MODE=mock
+      - SANDBOX_NAMESPACE=sandbox-workspaces
+      - PORT=8081
+    ports:
+      - "8081:8081"
+
+  new-api:
+    image: calciumion/new-api:latest
+    ports:
+      - "${NEWAPI_PORT:-3081}:3000"
+    volumes:
+      - new-api-data:/data
+
+volumes:
+  portal-data:
+  new-api-data:

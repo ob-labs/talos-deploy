@@ -1,0 +1,18 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: talos-portal
+  namespace: system
+spec:
+  template:
+    spec:
+      containers:
+        - name: talos-portal
+          volumeMounts:
+            - name: newapi-data
+              mountPath: /data/new-api
+              readOnly: true
+      volumes:
+        - name: newapi-data
+          persistentVolumeClaim:
+            claimName: new-api-data

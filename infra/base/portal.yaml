@@ -1,0 +1,123 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: talos-portal
+  namespace: system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: talos-portal
+  template:
+    metadata:
+      labels:
+        app: talos-portal
+    spec:
+      containers:
+        - name: talos-portal
+          image: talos-portal:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - name: PORT
+              value: "8080"
+            - name: ADMIN_EMAIL
+              value: "admin@talos.dev"
+            - name: ADMIN_PASSWORD
+              value: "admin"
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: talos-portal-secrets
+                  key: jwt-secret
+            - name: NEWAPI_BASE
+              value: "http://new-api.system.svc.cluster.local:3000"
+            - name: NEWAPI_ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: talos-portal-secrets
+                  key: newapi-admin-token
+                  optional: true
+            - name: UPSTREAM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: talos-portal-secrets
+                  key: upstream-api-key
+                  optional: true
+            - name: UPSTREAM_BASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: talos-portal-secrets
+                  key: upstream-base-url
+                  optional: true
+            - name: UPSTREAM_CHANNEL_TYPE
+              valueFrom:
+                secretKeyRef:
+                  name: talos-portal-secrets
+                  key: upstream-channel-type
+                  optional: true
+            - name: UPSTREAM_MODELS
+              valueFrom:
+                secretKeyRef:
+                  name: talos-portal-secrets
+                  key: upstream-models
+                  optional: true
+            - name: SANDBOX_DEFAULT_OPUS_MODEL
+              valueFrom:
+                secretKeyRef:
+                  name: talos-portal-secrets
+                  key: sandbox-default-opus-model
+                  optional: true
+            - name: SANDBOX_DEFAULT_SONNET_MODEL
+              valueFrom:
+                secretKeyRef:
+                  name: talos-portal-secrets
+                  key: sandbox-default-sonnet-model
+                  optional: true
+            - name: SANDBOX_DEFAULT_HAIKU_MODEL
+              valueFrom:
+                secretKeyRef:
+                  name: talos-portal-secrets
+                  key: sandbox-default-haiku-model
+                  optional: true
+            - name: SANDBOX_MANAGER_URL
+              value: "http://sandbox-manager.system.svc.cluster.local:8081"
+            - name: SANDBOX_NAMESPACE
+              value: "sandbox-workspaces"
+            - name: SANDBOX_TEMPLATE
+              value: "claude-workspace"
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: talos-portal-data
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: talos-portal-data
+  namespace: system
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: talos-portal
+  namespace: system
+spec:
+  type: NodePort
+  selector:
+    app: talos-portal
+  ports:
+    - port: 8080
+      targetPort: 8080
+      nodePort: 30002

@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: new-api
+  namespace: system
+  labels:
+    app: new-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: new-api
+  template:
+    metadata:
+      labels:
+        app: new-api
+    spec:
+      containers:
+        - name: new-api
+          image: calciumion/new-api:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3000
+          env:
+            - name: SESSION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: new-api-secrets
+                  key: session-secret
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: new-api-data
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: new-api-data
+  namespace: system
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: new-api
+  namespace: system
+spec:
+  type: NodePort
+  selector:
+    app: new-api
+  ports:
+    - port: 3000
+      targetPort: 3000
+      nodePort: 30001

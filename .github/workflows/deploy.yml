@@ -1,0 +1,89 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag (e.g. v1.2.3)"
+        required: false
+        default: "latest"
+
+env:
+  REGISTRY: ${{ secrets.REGISTRY }}
+  IMAGE_TAG: ${{ github.event.inputs.image_tag || 'latest' }}
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.REGISTRY }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+
+      - name: Build and push images
+        run: |
+          # Workspace
+          docker buildx build --platform linux/amd64 --push \
+            -t $REGISTRY/claude-workspace:$IMAGE_TAG \
+            ./images/workspace
+
+          # Portal
+          docker buildx build --platform linux/amd64 --push \
+            -t $REGISTRY/talos-portal:$IMAGE_TAG \
+            ./server
+
+          # Sandbox Manager
+          docker buildx build --platform linux/amd64 --push \
+            -t $REGISTRY/sandbox-manager:$IMAGE_TAG \
+            ./sandbox-manager
+
+      # ─── Render kustomize locally in CI ─────────────────────────
+      - name: Setup kustomize
+        uses: imranismail/setup-kustomize@v2
+
+      - name: Render kustomize manifest
+        run: |
+          # Stage directory for SCP
+          mkdir -p /tmp/talos-deploy
+          cp scripts/deploy-remote.sh /tmp/talos-deploy/
+          chmod +x /tmp/talos-deploy/deploy-remote.sh
+
+          # Work on a temp copy to avoid mutating checked-in files
+          TMP_OVERLAY=$(mktemp -d /tmp/talos-overlay.XXXXXX)
+          cp infra/overlays/production/kustomization.yaml "$TMP_OVERLAY/"
+          cd "$TMP_OVERLAY"
+          kustomize edit set image claude-workspace="$REGISTRY/claude-workspace:$IMAGE_TAG"
+          kustomize edit set image talos-portal="$REGISTRY/talos-portal:$IMAGE_TAG"
+          kustomize edit set image sandbox-manager="$REGISTRY/sandbox-manager:$IMAGE_TAG"
+          kustomize build . > /tmp/talos-deploy/manifest.yaml
+
+      # ─── SCP to ECS ─────────────────────────────────────────────
+      # No git clone needed on ECS — we send the pre-rendered YAML + deploy script.
+      # ECS only needs: k3s + kubectl (set up once by scripts/ecs-init.sh).
+      - name: Copy files to ECS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.ECS_HOST }}
+          username: ${{ secrets.ECS_USER }}
+          key: ${{ secrets.ECS_SSH_KEY }}
+          source: "/tmp/talos-deploy/*"
+          target: /opt/talos
+          strip_components: 2
+
+      - name: Deploy to ECS
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.ECS_HOST }}
+          username: ${{ secrets.ECS_USER }}
+          key: ${{ secrets.ECS_SSH_KEY }}
+          script: |
+            cd /opt/talos
+            bash deploy-remote.sh manifest.yaml

@@ -1,0 +1,15 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+images:
+  - name: claude-workspace
+    newName: talos-registry:5000/claude-workspace
+  - name: talos-portal
+    newName: talos-registry:5000/talos-portal
+  - name: sandbox-manager
+    newName: talos-registry:5000/sandbox-manager
+patches:
+  - path: portal-newapi-volume.yaml
+  - path: warm-pool-patch.yaml
+  - path: image-pull-policy.yaml
