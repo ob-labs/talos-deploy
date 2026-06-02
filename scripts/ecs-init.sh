@@ -12,6 +12,13 @@ set -euo pipefail
 #
 # After this script, use CI/CD (push to main) or scripts/deploy.sh for ongoing deploys.
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+if [ -f "$PROJECT_DIR/.env" ]; then
+  set -a; source "$PROJECT_DIR/.env"; set +a
+fi
+
 REGISTRY="${REGISTRY:?请设置 REGISTRY (镜像仓库地址)}"
 REGISTRY_USERNAME="${REGISTRY_USERNAME:?请设置 REGISTRY_USERNAME}"
 REGISTRY_PASSWORD="${REGISTRY_PASSWORD:?请设置 REGISTRY_PASSWORD}"
