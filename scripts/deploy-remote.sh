@@ -17,6 +17,16 @@ PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 KUBECONFIG="${KUBECONFIG:-/etc/rancher/k3s/k3s.yaml}"
 export KUBECONFIG
 
+# Use k3s kubectl if standalone kubectl is not available
+if command -v kubectl &>/dev/null; then
+  KUBECTL=kubectl
+elif command -v k3s &>/dev/null; then
+  KUBECTL="k3s kubectl"
+else
+  echo "ERROR: neither kubectl nor k3s found"
+  exit 1
+fi
+
 # Load registry config from .env if present
 if [ -f "$PROJECT_DIR/.env" ]; then
   set -a; source "$PROJECT_DIR/.env"; set +a
@@ -43,22 +53,22 @@ if [ "$DO_APPLY" = true ]; then
   kustomize edit set image claude-workspace="$REGISTRY/claude-workspace:latest"
   kustomize edit set image talos-portal="$REGISTRY/talos-portal:latest"
   kustomize edit set image sandbox-manager="$REGISTRY/sandbox-manager:latest"
-  kubectl apply -k .
+  $KUBECTL apply -k .
   cd "$PROJECT_DIR"
 fi
 
 if [ "$DO_RESTART" = true ]; then
   echo ""
   echo "=== Restarting deployments (pull latest images) ==="
-  kubectl rollout restart deploy/new-api deploy/sandbox-manager deploy/talos-portal -n system
+  $KUBECTL rollout restart deploy/new-api deploy/sandbox-manager deploy/talos-portal -n system
 fi
 
 echo ""
 echo "=== Waiting for rollouts ==="
-kubectl rollout status deploy/new-api -n system --timeout=180s || true
-kubectl rollout status deploy/sandbox-manager -n system --timeout=180s || true
-kubectl rollout status deploy/talos-portal -n system --timeout=180s || true
+$KUBECTL rollout status deploy/new-api -n system --timeout=180s || true
+$KUBECTL rollout status deploy/sandbox-manager -n system --timeout=180s || true
+$KUBECTL rollout status deploy/talos-portal -n system --timeout=180s || true
 
 echo ""
 echo "=== Pod Status ==="
-kubectl get pods -n system
+$KUBECTL get pods -n system
