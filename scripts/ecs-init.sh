@@ -45,7 +45,7 @@ fi
 # Wait for k3s to be ready
 echo "Waiting for k3s node to be ready..."
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
-k3s kubectl wait --for=condition=Ready node/$(hostname) --timeout=120s
+k3s kubectl wait --for=condition=Ready node/$(hostname | tr '[:upper:]' '[:lower:]') --timeout=120s
 
 echo ""
 
