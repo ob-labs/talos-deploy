@@ -1,4 +1,4 @@
-name: Build and Deploy
+name: Build and Push
 
 on:
   push:
@@ -44,30 +44,3 @@ jobs:
           docker buildx build --platform linux/amd64 --push \
             -t $REGISTRY/sandbox-manager:$IMAGE_TAG \
             ./sandbox-manager
-
-      # ─── Render kustomize and commit manifest ────────────────────
-      # ECS cannot be reached from public internet (no inbound),
-      # so we commit the rendered manifest to the repo.
-      # ECS pulls it manually: git pull && kubectl apply.
-      # Long-term: replace with self-hosted runner on ECS.
-      - name: Setup kustomize
-        uses: imranismail/setup-kustomize@v2
-
-      - name: Render kustomize manifest
-        run: |
-          TMP_OVERLAY=$(mktemp -d /tmp/talos-overlay.XXXXXX)
-          cp infra/overlays/production/kustomization.yaml "$TMP_OVERLAY/"
-          cd "$TMP_OVERLAY"
-          kustomize edit set image claude-workspace="$REGISTRY/claude-workspace:$IMAGE_TAG"
-          kustomize edit set image talos-portal="$REGISTRY/talos-portal:$IMAGE_TAG"
-          kustomize edit set image sandbox-manager="$REGISTRY/sandbox-manager:$IMAGE_TAG"
-          kustomize build . > $GITHUB_WORKSPACE/deploy/manifest.yaml
-
-      - name: Commit rendered manifest
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add deploy/manifest.yaml
-          git diff --cached --quiet && echo "No changes to manifest" && exit 0
-          git commit -m "deploy: update manifest ($IMAGE_TAG)"
-          git push

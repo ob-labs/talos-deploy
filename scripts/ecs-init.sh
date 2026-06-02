@@ -17,6 +17,7 @@ REGISTRY_USERNAME="${REGISTRY_USERNAME:?请设置 REGISTRY_USERNAME}"
 REGISTRY_PASSWORD="${REGISTRY_PASSWORD:?请设置 REGISTRY_PASSWORD}"
 
 AGENT_SANDBOX_VERSION="${AGENT_SANDBOX_VERSION:-v0.4.6}"
+REPO_DIR="${REPO_DIR:-/opt/talos-deploy}"
 
 echo "=========================================="
 echo "  Talos Portal — ECS One-Time Init"
@@ -24,7 +25,7 @@ echo "=========================================="
 echo ""
 
 # ─── Step 1: Install k3s ─────────────────────────────────────────────
-echo "=== Step 1/5: Install k3s ==="
+echo "=== Step 1/7: Install k3s ==="
 if command -v k3s &>/dev/null && k3s kubectl get nodes &>/dev/null; then
   echo "k3s already installed and running, skipping..."
 else
@@ -42,7 +43,7 @@ k3s kubectl wait --for=condition=Ready node/$(hostname) --timeout=120s
 echo ""
 
 # ─── Step 2: Configure private registry ──────────────────────────────
-echo "=== Step 2/5: Configure private registry ==="
+echo "=== Step 2/7: Configure private registry ==="
 mkdir -p /etc/rancher/k3s
 
 # Extract registry host from full URL (e.g. registry.cn-hangzhou.aliyuncs.com)
@@ -65,7 +66,7 @@ echo "k3s restarted with registry config."
 echo ""
 
 # ─── Step 3: Install agent-sandbox controller ────────────────────────
-echo "=== Step 3/5: Install agent-sandbox controller ==="
+echo "=== Step 3/7: Install agent-sandbox controller ==="
 k3s kubectl apply -f "https://github.com/kubernetes-sigs/agent-sandbox/releases/download/${AGENT_SANDBOX_VERSION}/manifest.yaml"
 k3s kubectl apply -f "https://github.com/kubernetes-sigs/agent-sandbox/releases/download/${AGENT_SANDBOX_VERSION}/extensions.yaml"
 echo "agent-sandbox controller installed."
@@ -73,7 +74,7 @@ echo "agent-sandbox controller installed."
 echo ""
 
 # ─── Step 4: Create namespaces ──────────────────────────────────────
-echo "=== Step 4/5: Create namespaces ==="
+echo "=== Step 4/7: Create namespaces ==="
 k3s kubectl apply -f - <<EOF
 apiVersion: v1
 kind: Namespace
@@ -94,7 +95,7 @@ echo "Namespaces created."
 echo ""
 
 # ─── Step 5: Create secrets ─────────────────────────────────────────
-echo "=== Step 5/5: Create secrets ==="
+echo "=== Step 5/7: Create secrets ==="
 
 # new-api session secret
 if k3s kubectl get secret new-api-secrets -n system &>/dev/null; then
@@ -116,10 +117,20 @@ else
   echo "secret/talos-portal-secrets created (JWT secret generated)"
 fi
 
-# ─── Step 6: Clone repo ────────────────────────────────────────────
+# ─── Step 6: Install kustomize ──────────────────────────────────────
 echo ""
-echo "=== Step 6/6: Clone repo ==="
-REPO_DIR="${REPO_DIR:-/opt/talos-deploy}"
+echo "=== Step 6/7: Install kustomize ==="
+if command -v kustomize &>/dev/null; then
+  echo "kustomize already installed, skipping..."
+else
+  curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+  mv kustomize /usr/local/bin/
+  echo "kustomize installed."
+fi
+
+# ─── Step 7: Clone repo ────────────────────────────────────────────
+echo ""
+echo "=== Step 7/7: Clone repo ==="
 if [ -d "$REPO_DIR/.git" ]; then
   echo "Repo already cloned at $REPO_DIR, skipping..."
 else
@@ -142,6 +153,8 @@ echo "    --from-literal=upstream-base-url=<你的 Base URL> \\"
 echo "    --dry-run=client -o yaml | k3s kubectl apply -f -"
 echo ""
 echo "之后手动部署："
-echo "  ssh 到 ECS → cd $REPO_DIR → bash scripts/deploy-remote.sh"
+echo "  cd $REPO_DIR"
+echo "  npm run ecs:deploy -- --apply   # 首次部署（apply manifests + restart）"
+echo "  npm run ecs:deploy -- --restart # 后续部署（restart 拉最新镜像）"
 echo ""
 echo "长期方案：在 ECS 上装 self-hosted GitHub Actions runner 实现自动化。"

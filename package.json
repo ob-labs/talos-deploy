@@ -11,7 +11,9 @@
     "k3d": "./scripts/k3d-infra.sh",
     "k3d:down": "./scripts/k3d-down.sh",
     "k3d:rebuild": "./scripts/dev-rebuild.sh",
-    "deploy": "./scripts/deploy.sh"
+    "deploy": "./scripts/deploy.sh",
+    "ecs:init": "./scripts/ecs-init.sh",
+    "ecs:deploy": "./scripts/deploy-remote.sh"
   },
   "workspaces": [
     "server",

@@ -1,0 +1,36 @@
+# Ensure production always pulls latest images (used with :latest tag)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: talos-portal
+  namespace: system
+spec:
+  template:
+    spec:
+      containers:
+        - name: talos-portal
+          imagePullPolicy: Always
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sandbox-manager
+  namespace: system
+spec:
+  template:
+    spec:
+      containers:
+        - name: sandbox-manager
+          imagePullPolicy: Always
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: new-api
+  namespace: system
+spec:
+  template:
+    spec:
+      containers:
+        - name: new-api
+          imagePullPolicy: Always
