@@ -45,16 +45,15 @@ fi
 
 if [ "$DO_APPLY" = true ]; then
   echo "=== Applying manifests ==="
-  # Use a temp copy to set image names without mutating tracked files
-  TMP_OVERLAY=$(mktemp -d /tmp/talos-overlay.XXXXXX)
-  trap "rm -rf $TMP_OVERLAY" EXIT
-  cp "$OVERLAY_DIR"/* "$TMP_OVERLAY/"
-  cd "$TMP_OVERLAY"
-  kustomize edit set image claude-workspace="$REGISTRY/claude-workspace:latest"
-  kustomize edit set image talos-portal="$REGISTRY/talos-portal:latest"
-  kustomize edit set image sandbox-manager="$REGISTRY/sandbox-manager:latest"
-  $KUBECTL apply -k .
-  cd "$PROJECT_DIR"
+  # Render with kustomize using -H to override images without mutating tracked files
+  MANIFEST=$(mktemp /tmp/talos-manifest.XXXXXX.yaml)
+  trap "rm -f $MANIFEST" EXIT
+  kustomize build "$OVERLAY_DIR" \
+    -H claude-workspace="$REGISTRY/claude-workspace:latest" \
+    -H talos-portal="$REGISTRY/talos-portal:latest" \
+    -H sandbox-manager="$REGISTRY/sandbox-manager:latest" \
+    > "$MANIFEST"
+  $KUBECTL apply -f "$MANIFEST"
 fi
 
 if [ "$DO_RESTART" = true ]; then
