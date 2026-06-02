@@ -128,9 +128,13 @@ else
   echo "kustomize installed."
 fi
 
-# ─── Step 7: Clone repo ────────────────────────────────────────────
+# ─── Step 7: Install git and clone repo ──────────────────────────────
 echo ""
-echo "=== Step 7/7: Clone repo ==="
+echo "=== Step 7/7: Install git and clone repo ==="
+if ! command -v git &>/dev/null; then
+  yum install -y git
+  echo "git installed."
+fi
 if [ -d "$REPO_DIR/.git" ]; then
   echo "Repo already cloned at $REPO_DIR, skipping..."
 else
