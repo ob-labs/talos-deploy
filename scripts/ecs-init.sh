@@ -116,6 +116,18 @@ else
   echo "secret/talos-portal-secrets created (JWT secret generated)"
 fi
 
+# ─── Step 6: Clone repo ────────────────────────────────────────────
+echo ""
+echo "=== Step 6/6: Clone repo ==="
+REPO_DIR="${REPO_DIR:-/opt/talos-deploy}"
+if [ -d "$REPO_DIR/.git" ]; then
+  echo "Repo already cloned at $REPO_DIR, skipping..."
+else
+  REPO_URL="${REPO_URL:-https://github.com/ob-labs/talos-deploy.git}"
+  git clone "$REPO_URL" "$REPO_DIR"
+  echo "Repo cloned to $REPO_DIR"
+fi
+
 echo ""
 echo "=========================================="
 echo "  ECS Init Complete!"
@@ -129,6 +141,7 @@ echo "    --from-literal=upstream-api-key=<你的 API Key> \\"
 echo "    --from-literal=upstream-base-url=<你的 Base URL> \\"
 echo "    --dry-run=client -o yaml | k3s kubectl apply -f -"
 echo ""
-echo "或者直接设置环境变量后重新运行此脚本（会自动更新 secrets）。"
+echo "之后手动部署："
+echo "  ssh 到 ECS → cd $REPO_DIR → bash scripts/deploy-remote.sh"
 echo ""
-echo "之后每次 push main 就会自动部署。"
+echo "长期方案：在 ECS 上装 self-hosted GitHub Actions runner 实现自动化。"

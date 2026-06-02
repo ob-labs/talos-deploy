@@ -1,36 +1,35 @@
 #!/bin/bash
 set -euo pipefail
 
-# Remote deploy script — runs ON the ECS server.
-# Accepts a pre-rendered k8s manifest YAML and applies it.
-# No git, no kustomize, no source code needed.
+# Deploy on ECS — pull latest manifest from repo and apply.
+# Run this on ECS after SSH-ing in.
 #
 # Usage:
-#   cat manifest.yaml | bash scripts/deploy-remote.sh
-#   bash scripts/deploy-remote.sh manifest.yaml
+#   bash scripts/deploy-remote.sh
 #
-# This script is intended to be called by CI/CD after rendering kustomize.
+# Prerequisites:
+#   - Repo cloned to /opt/talos-deploy (or set REPO_DIR)
+#   - k3s installed (scripts/ecs-init.sh)
 
+REPO_DIR="${REPO_DIR:-/opt/talos-deploy}"
 KUBECONFIG="${KUBECONFIG:-/etc/rancher/k3s/k3s.yaml}"
 export KUBECONFIG
 
-MANIFEST_FILE="${1:-}"
+MANIFEST="$REPO_DIR/deploy/manifest.yaml"
 
-if [ -n "$MANIFEST_FILE" ]; then
-  echo "=== Applying manifest from file: $MANIFEST_FILE ==="
-  kubectl apply -f "$MANIFEST_FILE"
-elif [ ! -t 0 ]; then
-  # Read from stdin
-  TMPFILE=$(mktemp /tmp/talos-manifest.XXXXXX.yaml)
-  trap "rm -f $TMPFILE" EXIT
-  cat > "$TMPFILE"
-  echo "=== Applying manifest from stdin ($(wc -l < "$TMPFILE") lines) ==="
-  kubectl apply -f "$TMPFILE"
-else
-  echo "Usage: $0 [manifest.yaml]"
-  echo "       cat manifest.yaml | $0"
+if [ ! -f "$MANIFEST" ]; then
+  echo "ERROR: $MANIFEST not found"
+  echo "Run: cd /opt && git clone <repo-url> talos-deploy"
   exit 1
 fi
+
+echo "=== Pulling latest manifest ==="
+cd "$REPO_DIR"
+git pull
+
+echo ""
+echo "=== Applying manifest ==="
+kubectl apply -f "$MANIFEST"
 
 echo ""
 echo "=== Waiting for rollouts ==="
