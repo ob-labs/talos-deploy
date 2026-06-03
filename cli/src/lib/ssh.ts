@@ -60,6 +60,8 @@ export function establishSshRelay(
         // Connect WebSocket for this SSH session
         const ws = new WebSocket(wsUrl);
         let closed = false;
+        // Buffer TCP data until WebSocket is open
+        const pendingData: Buffer[] = [];
 
         const cleanupSocket = () => {
           if (closed) return;
@@ -68,20 +70,29 @@ export function establishSshRelay(
           try { tcpSocket.end(); } catch {}
         };
 
-        ws.on("open", () => {
-          // TCP → WebSocket
-          tcpSocket.on("data", (data: Buffer) => {
-            if (!closed && ws.readyState === WebSocket.OPEN) {
-              ws.send(data);
-            }
-          });
+        // Start listening for TCP data immediately (SSH sends handshake right away)
+        tcpSocket.on("data", (data: Buffer) => {
+          if (closed) return;
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(data);
+          } else {
+            pendingData.push(data);
+          }
+        });
 
-          // WebSocket → TCP
-          ws.on("message", (msg: WebSocket.Data) => {
-            if (!closed) {
-              tcpSocket.write(msg as Buffer);
-            }
-          });
+        // WebSocket → TCP
+        ws.on("message", (msg: WebSocket.Data) => {
+          if (!closed) {
+            tcpSocket.write(msg as Buffer);
+          }
+        });
+
+        ws.on("open", () => {
+          // Flush any data buffered while connecting
+          while (pendingData.length > 0) {
+            const d = pendingData.shift()!;
+            ws.send(d);
+          }
         });
 
         ws.on("error", (err) => {
