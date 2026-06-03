@@ -241,15 +241,20 @@ export async function ensureNewApiChannel(): Promise<void> {
   const models = (process.env.UPSTREAM_MODELS || "claude-opus-4-7,claude-sonnet-4-6,claude-haiku-4-5-20251001")
     .split(",").map((m) => m.trim()).filter(Boolean);
 
+  const channelPayload = { name: "default", type: channelType, key: apiKey, base_url: baseUrl, models: models.join(","), status: 1 };
+  console.log(`Creating channel: type=${channelType}, models=${models.join(",")}, base_url=${baseUrl}`);
+
   const createData = await withAdminAuth(async (headers) => {
     const resp = await fetch(`${NEWAPI_BASE}/api/channel/`, {
       method: "POST",
       headers,
-      body: JSON.stringify({ name: "default", type: channelType, key: apiKey, base_url: baseUrl, models: models.join(","), status: 1 }),
+      body: JSON.stringify(channelPayload),
     });
-    return resp.json() as any;
+    const data = await resp.json() as any;
+    console.log(`channel create response: status=${resp.status}, body=${JSON.stringify(data).slice(0, 500)}`);
+    return data;
   });
 
-  if (!createData.success) throw new Error(`channel create failed: ${createData.message}`);
+  if (!createData.success) throw new Error(`channel create failed: ${JSON.stringify(createData)}`);
   console.log("new-api channel initialized");
 }
