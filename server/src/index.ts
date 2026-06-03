@@ -12,6 +12,7 @@ import { adminRoutes } from "./routes/admin.js";
 import { progressRoutes } from "./progress/sse-handler.js";
 import { startIdleChecker } from "./scheduler/idle-checker.js";
 import { ensureNewApiChannel } from "./newapi/index.js";
+import { handleSshRelay } from "./routes/sandboxes-ssh.js";
 
 const PORT = Number(process.env.PORT) || 8080;
 const ADMIN_EMAIL: string = (() => {
@@ -92,9 +93,8 @@ async function main() {
   });
 
   wss.on("connection", (ws, request) => {
-    import("./routes/sandboxes-ssh.js").then(({ handleSshRelay }) => {
-      handleSshRelay(ws, request);
-    });
+    console.log(`WebSocket SSH relay connection: ${(ws as any).__sandboxId}`);
+    handleSshRelay(ws, request);
   });
 
   // Init new-api upstream channel in background (new-api may not be ready immediately)

@@ -8,9 +8,6 @@ const SM_BASE = process.env.SANDBOX_MANAGER_URL || "http://localhost:8081";
 /**
  * Handle WebSocket SSH relay connections.
  * Called from the WebSocket server in index.ts after upgrade.
- *
- * Auth: extract Bearer token from the upgrade request's `authorization` header
- * or from the `token` query parameter (for clients that can't set headers).
  */
 export function handleSshRelay(ws: WebSocket, request: IncomingMessage) {
   // ── Auth ──
@@ -20,6 +17,7 @@ export function handleSshRelay(ws: WebSocket, request: IncomingMessage) {
     request.headers.authorization?.slice(7);
 
   if (!token) {
+    console.log("ssh relay: no token, closing");
     ws.close(4001, "unauthorized");
     return;
   }
@@ -28,6 +26,7 @@ export function handleSshRelay(ws: WebSocket, request: IncomingMessage) {
   try {
     payload = verifyToken(token);
   } catch {
+    console.log("ssh relay: invalid token, closing");
     ws.close(4001, "invalid token");
     return;
   }
@@ -35,6 +34,7 @@ export function handleSshRelay(ws: WebSocket, request: IncomingMessage) {
   // ── Resolve sandbox ──
   const sandboxId = (ws as any).__sandboxId as number;
   const sb = findSandboxById(sandboxId);
+  console.log(`ssh relay: sandbox ${sandboxId}, claim=${sb?.sandboxclaim_name}, status=${sb?.status}, user=${payload.userId}`);
   if (!sb || sb.user_id !== payload.userId) {
     ws.close(4004, "not found");
     return;
@@ -46,6 +46,7 @@ export function handleSshRelay(ws: WebSocket, request: IncomingMessage) {
 
   // ── Connect to Sandbox Manager WebSocket ──
   const smWsUrl = SM_BASE.replace(/^http/, "ws") + `/sandboxes/${encodeURIComponent(sb.sandboxclaim_name)}/ssh`;
+  console.log(`ssh relay: connecting to SM at ${smWsUrl}`);
   const smWs = new WebSocket(smWsUrl);
   let closed = false;
 
@@ -57,6 +58,7 @@ export function handleSshRelay(ws: WebSocket, request: IncomingMessage) {
   };
 
   smWs.on("open", () => {
+    console.log(`ssh relay: SM connected, piping data`);
     // Client → Sandbox Manager
     ws.on("message", (msg: Buffer) => {
       if (!closed) smWs.send(msg);
@@ -69,7 +71,7 @@ export function handleSshRelay(ws: WebSocket, request: IncomingMessage) {
   });
 
   smWs.on("error", (err) => {
-    console.error(`ssh relay: sandbox-manager ws error for sandbox ${sandboxId}:`, err.message);
+    console.error(`ssh relay: SM ws error for sandbox ${sandboxId}:`, err.message);
     cleanup();
   });
 
