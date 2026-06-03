@@ -91,6 +91,11 @@ func (m *MockClient) GetPodName(ctx context.Context, sandboxName, namespace stri
 	return "", nil
 }
 
+func (m *MockClient) GetPodIP(ctx context.Context, sandboxName, namespace string) (string, error) {
+	// Mock: return a fake IP for testing
+	return "127.0.0.1", nil
+}
+
 func (m *MockClient) WaitForReady(ctx context.Context, name, namespace string, timeout time.Duration) (bool, error) {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {

@@ -1,8 +1,10 @@
 import fs from "fs";
+import net from "net";
 import path from "path";
 import os from "os";
-import { execSync, spawn, spawnSync } from "child_process";
-import { getSshKeyPath } from "../config/index.js";
+import { execSync, spawnSync } from "child_process";
+import WebSocket from "ws";
+import { getSshKeyPath, loadConfig, getPortalUrl } from "../config/index.js";
 import { api } from "../api/client.js";
 
 // ── SSH key management ─────────────────────────────────
@@ -26,13 +28,92 @@ export async function uploadSshKey() {
   return resp.ok;
 }
 
-// ── Port-forward ───────────────────────────────────────
+// ── SSH relay via WebSocket ─────────────────────────────
+
+/**
+ * Establish an SSH relay through the Portal's WebSocket endpoint.
+ * Creates a local TCP server; when SSH connects, data is piped through
+ * WebSocket → Portal → Sandbox Manager → pod SSH.
+ */
+export function establishSshRelay(
+  sandboxId: number
+): Promise<{ port: number; cleanup: () => void }> {
+  return new Promise((resolve, reject) => {
+    const config = loadConfig();
+    const portalUrl = getPortalUrl();
+
+    // Build WebSocket URL with auth token
+    const wsBaseUrl = portalUrl.replace(/^http/, "ws");
+    const tokenParam = config?.token ? `?token=${encodeURIComponent(config.token)}` : "";
+    const wsUrl = `${wsBaseUrl}/api/sandboxes/${sandboxId}/ssh${tokenParam}`;
+
+    const server = net.createServer();
+    server.listen(0, "127.0.0.1", () => {
+      const addr = server.address();
+      if (!addr || typeof addr === "string") {
+        reject(new Error("Failed to bind local server"));
+        return;
+      }
+      const port = addr.port;
+
+      server.on("connection", (tcpSocket) => {
+        // Connect WebSocket for this SSH session
+        const ws = new WebSocket(wsUrl);
+        let closed = false;
+
+        const cleanupSocket = () => {
+          if (closed) return;
+          closed = true;
+          try { ws.close(); } catch {}
+          try { tcpSocket.end(); } catch {}
+        };
+
+        ws.on("open", () => {
+          // TCP → WebSocket
+          tcpSocket.on("data", (data: Buffer) => {
+            if (!closed && ws.readyState === WebSocket.OPEN) {
+              ws.send(data);
+            }
+          });
+
+          // WebSocket → TCP
+          ws.on("message", (msg: WebSocket.Data) => {
+            if (!closed) {
+              tcpSocket.write(msg as Buffer);
+            }
+          });
+        });
+
+        ws.on("error", (err) => {
+          console.error(`WebSocket error: ${err.message}`);
+          cleanupSocket();
+        });
+
+        ws.on("close", () => cleanupSocket());
+        tcpSocket.on("close", () => cleanupSocket());
+        tcpSocket.on("error", () => cleanupSocket());
+      });
+
+      resolve({
+        port,
+        cleanup: () => {
+          server.close();
+        },
+      });
+    });
+
+    server.on("error", (err) => reject(err));
+  });
+}
+
+// ── Legacy: kubectl port-forward (kept as fallback) ────
 
 export function establishPortForward(
   podName: string,
   namespace: string
 ): Promise<{ port: number; cleanup: () => void }> {
   return new Promise((resolve, reject) => {
+    const { spawn } = require("child_process");
     const pf = spawn("kubectl", ["port-forward", podName, "0:22", "-n", namespace], {
       stdio: ["pipe", "pipe", "pipe"],
     });

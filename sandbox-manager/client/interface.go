@@ -10,6 +10,7 @@ type SandboxClient interface {
 	DeleteClaim(ctx context.Context, name, namespace string) error
 	GetStatus(ctx context.Context, name, namespace string) (*ClaimStatus, error)
 	GetPodName(ctx context.Context, sandboxName, namespace string) (string, error)
+	GetPodIP(ctx context.Context, sandboxName, namespace string) (string, error)
 	WaitForReady(ctx context.Context, name, namespace string, timeout time.Duration) (bool, error)
 	InjectEnv(ctx context.Context, claimName, namespace string, sshKeys []string, apiKey, apiBase string, extraEnv map[string]string) error
 	ListClaims(ctx context.Context, namespace string) ([]ClaimInfo, error)

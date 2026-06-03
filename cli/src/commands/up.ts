@@ -1,4 +1,4 @@
-import { ensureSshKey, uploadSshKey, establishPortForward, updateSshConfig, sshIntoSandbox } from "../lib/ssh.js";
+import { ensureSshKey, uploadSshKey, establishSshRelay, updateSshConfig, sshIntoSandbox } from "../lib/ssh.js";
 import { api } from "../api/client.js";
 import { streamProgress, ProgressEvent } from "../api/progress.js";
 
@@ -61,27 +61,16 @@ export async function upCommand(opts: { project: string }) {
     await showProgress(sandbox.id, data.operationId);
   }
 
-  // Step 4: Get connection info
+  // Step 4: Establish SSH relay (WebSocket → pod SSH)
   process.stdout.write("  Establishing connection...");
-  const connResp = await api(`/api/sandboxes/${sandbox.id}/connection`);
-  const connData = (await connResp.json()) as any;
-  if (!connResp.ok) {
-    process.stdout.write(`${CLEAR_LINE}  ${RED}✗${RESET} ${connData.error || "Failed to get connection info"}\n`);
-    process.exit(1);
-  }
-
-  const { podName, namespace } = connData;
-
-  // Step 5: Port-forward
-  process.stdout.write(`${CLEAR_LINE}  ${YELLOW}⠋${RESET} Setting up port-forward...`);
   let port: number;
   let cleanup: () => void;
   try {
-    const pf = await establishPortForward(podName, namespace);
-    port = pf.port;
-    cleanup = pf.cleanup;
+    const relay = await establishSshRelay(sandbox.id);
+    port = relay.port;
+    cleanup = relay.cleanup;
     updateSshConfig(opts.project, port);
-    process.stdout.write(`${CLEAR_LINE}  ${GREEN}✓${RESET} Port-forward established (localhost:${port})\n`);
+    process.stdout.write(`${CLEAR_LINE}  ${GREEN}✓${RESET} Connection established (localhost:${port})\n`);
   } catch (err: any) {
     process.stdout.write(`${CLEAR_LINE}  ${RED}✗${RESET} ${err.message}\n`);
     process.exit(1);

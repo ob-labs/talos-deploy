@@ -134,6 +134,21 @@ func (k *K8sClient) GetPodName(ctx context.Context, sandboxName, namespace strin
 	return "", fmt.Errorf("no running pod found for sandbox %s in %s", sandboxName, namespace)
 }
 
+func (k *K8sClient) GetPodIP(ctx context.Context, sandboxName, namespace string) (string, error) {
+	podName, err := k.GetPodName(ctx, sandboxName, namespace)
+	if err != nil {
+		return "", err
+	}
+	pod, err := k.coreClient.CoreV1().Pods(namespace).Get(ctx, podName, metav1.GetOptions{})
+	if err != nil {
+		return "", fmt.Errorf("get pod %s/%s: %w", namespace, podName, err)
+	}
+	if pod.Status.PodIP == "" {
+		return "", fmt.Errorf("pod %s has no IP yet", podName)
+	}
+	return pod.Status.PodIP, nil
+}
+
 func (k *K8sClient) WaitForReady(ctx context.Context, name, namespace string, timeout time.Duration) (bool, error) {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
