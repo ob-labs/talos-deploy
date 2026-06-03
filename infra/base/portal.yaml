@@ -16,7 +16,7 @@ spec:
       containers:
         - name: talos-portal
           image: talos-portal:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           ports:
             - containerPort: 8080
           env:

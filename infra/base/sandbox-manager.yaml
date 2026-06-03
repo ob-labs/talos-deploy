@@ -17,7 +17,7 @@ spec:
       containers:
         - name: sandbox-manager
           image: sandbox-manager:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           ports:
             - containerPort: 8081
           env:
