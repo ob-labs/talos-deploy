@@ -44,28 +44,6 @@ async function main() {
   await app.register(cors, { origin: true });
   await app.register(cookie);
 
-  // Attach WebSocket server to Fastify's HTTP server for SSH relay
-  const wss = new WebSocketServer({ noServer: true });
-  app.server.on("upgrade", (request, socket, head) => {
-    const url = request.url || "/";
-    const match = url.match(/^\/api\/sandboxes\/(\d+)\/ssh(\?.*)?$/);
-    if (!match) {
-      socket.destroy();
-      return;
-    }
-    wss.handleUpgrade(request, socket, head, (ws) => {
-      (ws as any).__sandboxId = Number(match[1]);
-      wss.emit("connection", ws, request);
-    });
-  });
-
-  // Handle WebSocket connections for SSH relay
-  wss.on("connection", (ws, request) => {
-    import("./routes/sandboxes-ssh.js").then(({ handleSshRelay }) => {
-      handleSshRelay(ws, request);
-    });
-  });
-
   // Routes
   await app.register(authRoutes);
   await app.register(sshKeyRoutes);
@@ -97,6 +75,27 @@ async function main() {
 
   await app.listen({ port: PORT, host: "0.0.0.0" });
   console.log(`Talos Portal running on :${PORT}`);
+
+  // Attach WebSocket server AFTER listen() — app.server is null before this
+  const wss = new WebSocketServer({ noServer: true });
+  app.server.on("upgrade", (request, socket, head) => {
+    const url = request.url || "/";
+    const match = url.match(/^\/api\/sandboxes\/(\d+)\/ssh(\?.*)?$/);
+    if (!match) {
+      socket.destroy();
+      return;
+    }
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      (ws as any).__sandboxId = Number(match[1]);
+      wss.emit("connection", ws, request);
+    });
+  });
+
+  wss.on("connection", (ws, request) => {
+    import("./routes/sandboxes-ssh.js").then(({ handleSshRelay }) => {
+      handleSshRelay(ws, request);
+    });
+  });
 
   // Init new-api upstream channel in background (new-api may not be ready immediately)
   (async () => {
