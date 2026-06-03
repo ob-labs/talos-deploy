@@ -58,6 +58,106 @@ async function withAdminAuth<T>(fn: (headers: Record<string, string>) => Promise
   return result;
 }
 
+// ── Startup initialization ────────────────────────────────
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Ensure the root user exists in New API.
+ * Try login first — if it succeeds, user exists and password matches.
+ * If login fails, try to register via /api/user/register.
+ */
+async function ensureRootUser(): Promise<void> {
+  // Try login first — if it works, user exists
+  try {
+    await login();
+    return;
+  } catch {
+    // Login failed — user may not exist or password mismatch
+  }
+
+  // Try to register
+  const resp = await fetch(`${NEWAPI_BASE}/api/user/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: "root", password: NEWAPI_ROOT_PASSWORD }),
+  });
+  const data = await resp.json() as any;
+
+  if (data.success) {
+    console.log("New API root user registered");
+    return;
+  }
+
+  // "already exists" is OK — it means the user is there but with a different password
+  const msg = String(data.message || "").toLowerCase();
+  if (msg.includes("already") || msg.includes("exist") || msg.includes("duplicate")) {
+    console.warn("New API root user exists but password may differ from NEWAPI_ROOT_PASSWORD");
+    console.warn("If login fails, update root password in New API to match NEWAPI_ROOT_PASSWORD");
+    return;
+  }
+
+  throw new Error(`register root failed: ${data.message}`);
+}
+
+/**
+ * Verify the current session works and check admin role.
+ * Calls GET /api/user/self to validate session and inspect role.
+ * role >= 100 = admin, role 1 = regular user.
+ */
+async function verifySession(): Promise<void> {
+  if (!_session) throw new Error("No session to verify");
+
+  const resp = await fetch(`${NEWAPI_BASE}/api/user/self`, { headers: adminHeaders() });
+  const data = await resp.json() as any;
+
+  if (!data.success) {
+    throw new Error(`session verification failed: ${data.message}`);
+  }
+
+  const role = data.data?.role ?? 0;
+  if (role < 100) {
+    console.error("");
+    console.error("═══════════════════════════════════════════════════════════");
+    console.error("WARNING: New API root user is NOT an admin (role=" + role + ")");
+    console.error("Channel creation and other admin operations will fail.");
+    console.error("Fix: run this command on the ECS server:");
+    console.error("  k3s kubectl exec deploy/new-api -n system -- sh -c \\");
+    console.error('    "sqlite3 /data/one-api.db \\"UPDATE users SET role=100 WHERE username=\'root\';\\" "');
+    console.error("═══════════════════════════════════════════════════════════");
+    console.error("");
+    throw new Error("root user lacks admin privileges (role=" + role + ", need 100+)");
+  }
+
+  console.log(`New API session verified (role=${role}, admin=true)`);
+}
+
+/**
+ * Initialize New API session at Portal startup.
+ * Blocking — ensures a valid admin session exists before the Portal accepts traffic.
+ * Retries up to 6 times with increasing backoff if New API isn't ready yet.
+ */
+export async function initNewApi(): Promise<void> {
+  for (let attempt = 1; attempt <= 6; attempt++) {
+    try {
+      await ensureRootUser();     // Register root user if needed
+      if (!_session) await login(); // Login (ensureRootUser may have already logged in)
+      await verifySession();       // Verify session + admin role
+      console.log("New API initialization complete");
+      return;
+    } catch (e: any) {
+      _session = null; // Clear stale session
+      console.warn(`New API init attempt ${attempt}/6 failed: ${e.message}`);
+      if (attempt < 6) {
+        await sleep(5000 * attempt);
+      }
+    }
+  }
+  // Not fatal — Portal can still serve, but API key features won't work
+  console.error("WARNING: New API session not established. API key features unavailable.");
+  console.error("Check that New API is running and NEWAPI_ROOT_PASSWORD is correct.");
+}
+
 // ── Token CRUD ────────────────────────────────────────────
 
 export async function createToken(name: string, remainQuota: number = NEWAPI_USER_QUOTA): Promise<string> {

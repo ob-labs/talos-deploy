@@ -75,6 +75,10 @@ $KUBECTL rollout status deploy/new-api -n system --timeout=180s || true
 $KUBECTL rollout status deploy/sandbox-manager -n system --timeout=180s || true
 $KUBECTL rollout status deploy/talos-portal -n system --timeout=180s || true
 
+# Ensure root user has admin role (idempotent)
+$KUBECTL exec deploy/new-api -n system -- sh -c \
+  "sqlite3 /data/one-api.db \"UPDATE users SET role=100 WHERE username='root';\"" 2>/dev/null || true
+
 echo ""
 echo "=== Pod Status ==="
 $KUBECTL get pods -n system

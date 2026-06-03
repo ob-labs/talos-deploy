@@ -11,7 +11,7 @@ import { sandboxRoutes } from "./routes/sandboxes.js";
 import { adminRoutes } from "./routes/admin.js";
 import { progressRoutes } from "./progress/sse-handler.js";
 import { startIdleChecker } from "./scheduler/idle-checker.js";
-import { ensureNewApiChannel } from "./newapi/index.js";
+import { initNewApi, ensureNewApiChannel } from "./newapi/index.js";
 import { handleSshRelay } from "./routes/sandboxes-ssh.js";
 
 const PORT = Number(process.env.PORT) || 8080;
@@ -39,6 +39,9 @@ async function main() {
   // Ensure admin user exists
   const admin = ensureAdmin(ADMIN_EMAIL, ADMIN_PASSWORD, "Admin");
   console.log(`Admin user: ${admin.email} (id=${admin.id})`);
+
+  // Initialize New API session (blocking — ensures admin session before accepting traffic)
+  await initNewApi();
 
   const app = Fastify({ logger: true });
 
@@ -97,18 +100,10 @@ async function main() {
     handleSshRelay(ws, request);
   });
 
-  // Init new-api upstream channel in background (new-api may not be ready immediately)
-  (async () => {
-    for (let attempt = 0; attempt < 6; attempt++) {
-      await new Promise((r) => setTimeout(r, 5000 * (attempt + 1)));
-      try {
-        await ensureNewApiChannel();
-        return;
-      } catch (e: any) {
-        console.warn(`new-api channel init attempt ${attempt + 1} failed: ${e.message}`);
-      }
-    }
-  })();
+  // Init new-api upstream channel in background (session already validated by initNewApi)
+  ensureNewApiChannel().catch((e: any) => {
+    console.warn(`new-api channel init failed: ${e.message}`);
+  });
 }
 
 main().catch((err) => {
