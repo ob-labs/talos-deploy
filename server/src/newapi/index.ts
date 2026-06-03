@@ -1,11 +1,9 @@
 // Node 20+ has built-in fetch
 
-import Database from "better-sqlite3";
 import { findUserById, updateUserApiKey } from "../db/users.js";
 
 const NEWAPI_BASE = process.env.NEWAPI_BASE || "http://new-api.system.svc.cluster.local:3000";
 const NEWAPI_ROOT_PASSWORD = process.env.NEWAPI_ROOT_PASSWORD || "12345678";
-const NEWAPI_DB_PATH = "/data/new-api/one-api.db";
 const NEWAPI_USER_QUOTA = parseInt(process.env.NEWAPI_USER_QUOTA || "500000000000"); // ~$500K
 
 let _session: string | null = null;
@@ -74,17 +72,22 @@ export async function createToken(name: string, remainQuota: number = NEWAPI_USE
 
   if (!data.success) throw new Error(`New API createToken failed: ${data.message}`);
 
-  // API may return key on creation (some versions), otherwise read from shared DB volume
+  // API may return key on creation (some versions)
   if (data.data?.key) return data.data.key;
-  return readTokenKeyFromDB(name);
+
+  // Fallback: query token via API (works in k8s where DB volume isn't shared)
+  return queryTokenKey(name);
 }
 
-function readTokenKeyFromDB(tokenName: string): string {
-  const db = new Database(NEWAPI_DB_PATH, { readonly: true });
-  const row = db.prepare("SELECT key FROM tokens WHERE name = ? ORDER BY id DESC LIMIT 1").get(tokenName) as any;
-  db.close();
-  if (!row?.key) throw new Error(`Token "${tokenName}" not found in New API DB after creation`);
-  return row.key;
+async function queryTokenKey(tokenName: string): Promise<string> {
+  const data = await withAdminAuth(async (headers) => {
+    const resp = await fetch(`${NEWAPI_BASE}/api/token/?name=${encodeURIComponent(tokenName)}`, { headers });
+    return resp.json() as any;
+  });
+  const items = Array.isArray(data.data) ? data.data : (data.data?.items ?? []);
+  const token = items.find((t: any) => t.name === tokenName);
+  if (token?.key) return token.key;
+  throw new Error(`Token "${tokenName}" not found via New API after creation`);
 }
 
 export async function ensureUserApiKey(userId: number): Promise<string> {
