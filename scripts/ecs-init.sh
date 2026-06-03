@@ -44,21 +44,8 @@ echo ""
 echo "=== Step 2/8: Install k3s ==="
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
-if k3s kubectl get nodes &>/dev/null 2>&1; then
-  echo "k3s already installed and running, skipping..."
-else
-  # Try normal install first
-  if ! curl -sfL https://get.k3s.io | sh -s - server --disable traefik 2>/dev/null; then
-    echo "Standard k3s install failed (likely selinux issue), falling back to manual setup..."
-    # Download k3s binary
-    K3S_VERSION="v1.35.5+k3s1"
-    if [ ! -f /usr/local/bin/k3s ]; then
-      echo "Downloading k3s binary..."
-      curl -sfL "https://github.com/k3s-io/k3s/releases/download/${K3S_VERSION}/k3s" -o /usr/local/bin/k3s
-      chmod +x /usr/local/bin/k3s
-    fi
-    # Register systemd service directly (bypasses selinux RPM issue)
-    cat > /etc/systemd/system/k3s.service <<SVCEOF
+register_k3s_service() {
+  cat > /etc/systemd/system/k3s.service <<'SVCEOF'
 [Unit]
 Description=Lightweight Kubernetes
 After=network-online.target
@@ -80,17 +67,46 @@ RestartSec=5s
 [Install]
 WantedBy=multi-user.target
 SVCEOF
-    systemctl daemon-reload
-    systemctl enable --now k3s
-    echo "k3s installed (manual service registration)."
-  fi
+  systemctl daemon-reload
+  systemctl enable --now k3s
+}
 
-  mkdir -p ~/.kube
-  cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+if systemctl is-active k3s &>/dev/null; then
+  echo "k3s service already running, skipping..."
+elif [ -f /etc/systemd/system/k3s.service ]; then
+  echo "k3s service file found but not running, starting..."
+  systemctl start k3s
+elif [ -f /usr/local/bin/k3s ]; then
+  echo "k3s binary found, registering service..."
+  register_k3s_service
+else
+  # No k3s at all — try official install, fallback to manual
+  if curl -sfL --connect-timeout 10 https://get.k3s.io | sh -s - server --disable traefik 2>/dev/null; then
+    echo "k3s installed via official script."
+  else
+    echo "Official install failed, trying rancher mirror..."
+    if ! curl -sfL https://rancher-mirror.rancher.cn/k3s/k3s-install.sh | INSTALL_K3S_MIRROR=cn sh -s - server --disable traefik 2>/dev/null; then
+      echo "Mirror install also failed, downloading binary directly..."
+      curl -sfL --connect-timeout 30 -o /usr/local/bin/k3s \
+        https://rancher-mirror.rancher.cn/k3s/v1.35.5-k3s1/k3s
+      chmod +x /usr/local/bin/k3s
+      register_k3s_service
+    fi
+  fi
 fi
 
-# Wait for k3s to be ready
-echo "Waiting for k3s node to be ready..."
+mkdir -p ~/.kube
+cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+
+# Wait for k3s API to be ready (may take up to 60s on first start)
+echo "Waiting for k3s API to be ready..."
+for i in $(seq 1 30); do
+  if k3s kubectl get nodes &>/dev/null; then
+    break
+  fi
+  sleep 2
+done
+
 NODE_NAME=$(hostname | tr '[:upper:]' '[:lower:]')
 k3s kubectl wait --for=condition=Ready "node/${NODE_NAME}" --timeout=120s
 
