@@ -48,7 +48,7 @@ async function main() {
   const wss = new WebSocketServer({ noServer: true });
   app.server.on("upgrade", (request, socket, head) => {
     const url = request.url || "/";
-    const match = url.match(/^\/api\/sandboxes\/(\d+)\/ssh$/);
+    const match = url.match(/^\/api\/sandboxes\/(\d+)\/ssh(\?.*)?$/);
     if (!match) {
       socket.destroy();
       return;
