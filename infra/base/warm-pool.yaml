@@ -4,6 +4,6 @@ metadata:
   name: claude-pool
   namespace: sandbox-workspaces
 spec:
-  replicas: 2
+  replicas: 0
   sandboxTemplateRef:
     name: claude-workspace
