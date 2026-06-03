@@ -46,16 +46,9 @@ export function CliAuthPage() {
         return;
       }
 
-      // Send token to CLI callback
-      const callbackUrl = `http://localhost:${port}/callback?token=${encodeURIComponent(data.token)}&state=${encodeURIComponent(state!)}`;
-      try {
-        await fetch(callbackUrl);
-      } catch {
-        setError("Failed to connect to CLI. Make sure tt is still running.");
-        setLoading(false);
-        return;
-      }
-      setAuthorized(true);
+      // Send token to CLI callback via redirect (avoids Private Network Access blocking)
+      const callbackUrl = `http://localhost:${port}?token=${encodeURIComponent(data.token)}&state=${encodeURIComponent(state!)}`;
+      window.location.href = callbackUrl;
     } catch {
       setError("Authorization failed");
     } finally {
