@@ -172,11 +172,17 @@ export async function createToken(name: string, remainQuota: number = NEWAPI_USE
 
   if (!data.success) throw new Error(`New API createToken failed: ${data.message}`);
 
-  // API may return key on creation (some versions)
-  if (data.data?.key) return data.data.key;
+  // The creation response should contain the full key
+  const key = data.data?.key || data.data?.token_key || data.key;
+  if (key && !key.includes("*")) {
+    return key;
+  }
 
-  // Fallback: query token via API (works in k8s where DB volume isn't shared)
-  return queryTokenKey(name);
+  // Log what we got to diagnose format issues
+  console.warn(`createToken: creation response did not contain usable key, response keys: ${Object.keys(data.data || {}).join(",")}`);
+  console.warn(`createToken: full response (redacted): ${JSON.stringify(data).slice(0, 200)}`);
+
+  throw new Error("Token created but key not returned in response. Check new-api version compatibility.");
 }
 
 async function queryTokenKey(tokenName: string): Promise<string> {
