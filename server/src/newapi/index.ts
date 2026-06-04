@@ -160,13 +160,61 @@ export async function initNewApi(): Promise<void> {
 
 // ── Token CRUD ────────────────────────────────────────────
 
+/**
+ * Find an existing token by name.
+ */
+async function findTokenByName(name: string): Promise<{ id: number; name: string } | null> {
+  const data = await withAdminAuth(async (headers) => {
+    const resp = await fetch(`${NEWAPI_BASE}/api/token/?name=${encodeURIComponent(name)}`, { headers });
+    return resp.json() as any;
+  });
+  const items = Array.isArray(data.data) ? data.data : (data.data?.items ?? []);
+  return items.find((t: any) => t.name === name) ?? null;
+}
+
+/**
+ * Delete all tokens with the given name.
+ */
+async function deleteTokensByName(name: string): Promise<void> {
+  const data = await withAdminAuth(async (headers) => {
+    const resp = await fetch(`${NEWAPI_BASE}/api/token/?name=${encodeURIComponent(name)}`, { headers });
+    return resp.json() as any;
+  });
+  const items = Array.isArray(data.data) ? data.data : (data.data?.items ?? []);
+  for (const t of items.filter((t: any) => t.name === name)) {
+    await withAdminAuth(async (headers) => {
+      await fetch(`${NEWAPI_BASE}/api/token/${t.id}`, { method: "DELETE", headers });
+    });
+  }
+}
+
+/**
+ * Get the full (unmasked) key for a token by ID.
+ */
+async function getTokenFullKey(tokenId: number): Promise<string> {
+  const keyResp = await withAdminAuth(async (headers) => {
+    const resp = await fetch(`${NEWAPI_BASE}/api/token/${tokenId}/key`, {
+      method: "POST",
+      headers,
+    });
+    return resp.json() as any;
+  });
+  if (!keyResp.success || !keyResp.data?.key) {
+    throw new Error(`Failed to get token key: ${keyResp.message || "unknown error"}`);
+  }
+  return keyResp.data.key;
+}
+
 export async function createToken(name: string, remainQuota: number = NEWAPI_USER_QUOTA): Promise<string> {
-  // Step 1: Create token
+  // Delete any existing tokens with the same name to avoid duplicates
+  await deleteTokensByName(name);
+
+  // Create new token with group=default to match channel group
   const data = await withAdminAuth(async (headers) => {
     const resp = await fetch(`${NEWAPI_BASE}/api/token/`, {
       method: "POST",
       headers,
-      body: JSON.stringify({ name, remain_quota: remainQuota, unlimited_quota: false }),
+      body: JSON.stringify({ name, remain_quota: remainQuota, unlimited_quota: false, group: "default" }),
     });
     return resp.json() as any;
   });
@@ -178,30 +226,11 @@ export async function createToken(name: string, remainQuota: number = NEWAPI_USE
     return data.data.key;
   }
 
-  // Step 2: Find the token ID by name
-  const tokenId = await withAdminAuth(async (headers) => {
-    const resp = await fetch(`${NEWAPI_BASE}/api/token/?name=${encodeURIComponent(name)}`, { headers });
-    return resp.json() as any;
-  });
-
-  const items = Array.isArray(tokenId.data) ? tokenId.data : (tokenId.data?.items ?? []);
-  const token = items.find((t: any) => t.name === name);
+  // Fallback: find token by name, then get full key
+  const token = await findTokenByName(name);
   if (!token?.id) throw new Error(`Token "${name}" not found after creation`);
 
-  // Step 3: Get full key via POST /api/token/{id}/key
-  const keyResp = await withAdminAuth(async (headers) => {
-    const resp = await fetch(`${NEWAPI_BASE}/api/token/${token.id}/key`, {
-      method: "POST",
-      headers,
-    });
-    return resp.json() as any;
-  });
-
-  if (!keyResp.success || !keyResp.data?.key) {
-    throw new Error(`Failed to get token key: ${keyResp.message || "unknown error"}`);
-  }
-
-  return keyResp.data.key;
+  return getTokenFullKey(token.id);
 }
 
 export async function ensureUserApiKey(userId: number): Promise<string> {
