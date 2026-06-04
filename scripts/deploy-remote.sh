@@ -33,6 +33,7 @@ if [ -f "$PROJECT_DIR/.env" ]; then
 fi
 
 REGISTRY="${REGISTRY:?请设置 REGISTRY (镜像仓库地址)}"
+IMAGE_TAG="${IMAGE_TAG:-latest}"
 OVERLAY_DIR="$PROJECT_DIR/infra/overlays/production"
 
 DO_APPLY=true
@@ -52,9 +53,9 @@ if [ "$DO_APPLY" = true ]; then
   trap "mv '$BACKUP_KUSTOMIZE' '$ORIG_KUSTOMIZE'" EXIT
 
   cd "$OVERLAY_DIR"
-  kustomize edit set image claude-workspace="$REGISTRY/claude-workspace:latest"
-  kustomize edit set image talos-portal="$REGISTRY/talos-portal:latest"
-  kustomize edit set image sandbox-manager="$REGISTRY/sandbox-manager:latest"
+  kustomize edit set image claude-workspace="$REGISTRY/claude-workspace:$IMAGE_TAG"
+  kustomize edit set image talos-portal="$REGISTRY/talos-portal:$IMAGE_TAG"
+  kustomize edit set image sandbox-manager="$REGISTRY/sandbox-manager:$IMAGE_TAG"
   $KUBECTL apply -k .
   cd "$PROJECT_DIR"
 

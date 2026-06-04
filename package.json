@@ -13,7 +13,9 @@
     "k3d:rebuild": "./scripts/dev-rebuild.sh",
     "deploy": "./scripts/deploy.sh",
     "ecs:init": "./scripts/ecs-init.sh",
-    "ecs:deploy": "./scripts/deploy-remote.sh"
+    "ecs:deploy": "./scripts/deploy-remote.sh",
+    "ecs:runner": "./scripts/setup-runner.sh",
+    "ecs:rollback": "k3s kubectl rollout undo deploy/new-api deploy/sandbox-manager deploy/talos-portal -n system"
   },
   "workspaces": [
     "server",
