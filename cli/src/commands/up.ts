@@ -1,4 +1,4 @@
-import { ensureSshKey, uploadSshKey, establishSshRelay, updateSshConfig, sshIntoSandbox } from "../lib/ssh.js";
+import { ensureSshKey, uploadSshKey, updateSshConfig, sshIntoSandbox, resolveTalosBinaryPath } from "../lib/ssh.js";
 import { api } from "../api/client.js";
 import { streamProgress, ProgressEvent } from "../api/progress.js";
 
@@ -61,28 +61,14 @@ export async function upCommand(opts: { project: string }) {
     await showProgress(sandbox.id, data.operationId);
   }
 
-  // Step 4: Establish SSH relay (WebSocket → pod SSH)
-  process.stdout.write("  Establishing connection...");
-  let port: number;
-  let cleanup: () => void;
-  try {
-    const relay = await establishSshRelay(sandbox.id);
-    port = relay.port;
-    cleanup = relay.cleanup;
-    updateSshConfig(opts.project, port);
-    process.stdout.write(`${CLEAR_LINE}  ${GREEN}✓${RESET} Connection established (localhost:${port})\n`);
-  } catch (err: any) {
-    process.stdout.write(`${CLEAR_LINE}  ${RED}✗${RESET} ${err.message}\n`);
-    process.exit(1);
-  }
+  // Step 4: Write SSH config with ProxyCommand
+  const binaryPath = resolveTalosBinaryPath();
+  updateSshConfig(opts.project, binaryPath);
+  process.stdout.write(`${CLEAR_LINE}  ${GREEN}✓${RESET} SSH config updated (host: tt-${opts.project})\n`);
 
-  // Step 6: SSH
+  // Step 5: SSH via host alias
   console.log(`\n  ${BOLD}Connecting via SSH...${RESET}\n`);
-  try {
-    await sshIntoSandbox(port);
-  } finally {
-    cleanup();
-  }
+  await sshIntoSandbox(opts.project);
 }
 
 /**

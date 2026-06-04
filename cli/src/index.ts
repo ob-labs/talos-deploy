@@ -2,6 +2,7 @@
 import { Command } from "commander";
 import { authLoginCommand, authStatusCommand, authLogoutCommand } from "./commands/auth.js";
 import { upCommand } from "./commands/up.js";
+import { sshProxyCommand } from "./commands/ssh-proxy.js";
 
 const program = new Command();
 program
@@ -58,6 +59,17 @@ program
   .option("-p, --project <name>", "Project name", "default")
   .action(async (opts) => {
     await upCommand({ project: opts.project });
+  });
+
+// ── ssh-proxy ─────────────────────────────────────────────
+// Used as SSH ProxyCommand: SSH client spawns this to relay traffic via WebSocket
+
+program
+  .command("ssh-proxy")
+  .description("SSH ProxyCommand relay — connect stdin/stdout to sandbox via WebSocket")
+  .requiredOption("--project <name>", "Project name")
+  .action(async (opts) => {
+    await sshProxyCommand(opts.project);
   });
 
 program.parse();

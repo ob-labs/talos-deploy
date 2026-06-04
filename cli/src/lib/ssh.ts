@@ -153,17 +153,39 @@ export function establishPortForward(
   });
 }
 
+// ── Binary path resolution ─────────────────────────────
+
+export function resolveTalosBinaryPath(
+  execFn: (cmd: string) => Buffer = execSync,
+  argv: string[] = process.argv
+): string {
+  try {
+    return execFn("which talosd").toString().trim();
+  } catch {
+    return path.resolve(argv[1]);
+  }
+}
+
 // ── SSH config update ──────────────────────────────────
 
-export function updateSshConfig(project: string, port: number) {
-  const sshConfigPath = path.join(os.homedir(), ".ssh/config");
+export function updateSshConfig(
+  project: string,
+  binaryPath: string,
+  sshConfigPath: string = path.join(os.homedir(), ".ssh/config")
+) {
   let content = "";
   if (fs.existsSync(sshConfigPath)) {
     content = fs.readFileSync(sshConfigPath, "utf-8");
   }
 
   const hostAlias = `tt-${project}`;
-  const block = `\nHost ${hostAlias}\n  HostName localhost\n  Port ${port}\n  User coder\n  StrictHostKeyChecking no\n  IdentityFile ~/.ssh/id_ed25519\n`;
+  const block =
+    `\nHost ${hostAlias}\n` +
+    `  User coder\n` +
+    `  StrictHostKeyChecking no\n` +
+    `  UserKnownHostsFile /dev/null\n` +
+    `  IdentityFile ~/.ssh/id_ed25519\n` +
+    `  ProxyCommand ${binaryPath} ssh-proxy --project ${project}\n`;
 
   const regex = new RegExp(`\n?Host ${hostAlias}\n(?:  .*\n)*`);
   if (regex.test(content)) {
@@ -177,20 +199,12 @@ export function updateSshConfig(project: string, port: number) {
 
 // ── SSH session ────────────────────────────────────────
 
-export function sshIntoSandbox(port: number): Promise<void> {
+export function sshIntoSandbox(
+  project: string,
+  spawnFn: typeof spawn = spawn
+): Promise<void> {
   return new Promise((resolve, reject) => {
-    const sshKeyPath = getSshKeyPath();
-    const ssh = spawn(
-      "ssh",
-      [
-        "-p", String(port),
-        "-i", sshKeyPath,
-        "-o", "StrictHostKeyChecking=no",
-        "-o", "UserKnownHostsFile=/dev/null",
-        "coder@localhost",
-      ],
-      { stdio: "inherit" }
-    );
+    const ssh = spawnFn("ssh", [`tt-${project}`], { stdio: "inherit" });
 
     ssh.on("close", (code) => {
       if (code && code !== 0) {
