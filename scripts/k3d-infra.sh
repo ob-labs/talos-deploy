@@ -134,48 +134,38 @@ done
 
 _USER_QUOTA="${NEWAPI_USER_QUOTA:-500000000000}"
 
+_ADMIN_TOKEN_KEY="sk-admin-$(openssl rand -hex 16)"
+
 sqlite3 "$_TMP_DB" "
-UPDATE users SET \"group\"='default', quota=${_USER_QUOTA} WHERE id=1;
-UPDATE users SET \"group\"='default', quota=${_USER_QUOTA} WHERE username='root';
+UPDATE users SET role=100, \"group\"='default', quota=${_USER_QUOTA} WHERE id=1;
+UPDATE users SET role=100, \"group\"='default', quota=${_USER_QUOTA} WHERE username='root';
 INSERT OR IGNORE INTO channels (type, key, status, name, weight, created_time, base_url, models, \"group\", model_mapping, priority, auto_ban) VALUES (${UPSTREAM_CHANNEL_TYPE:-1}, '${UPSTREAM_API_KEY:-}', 1, 'default', 0, ${_NOW}, '${UPSTREAM_BASE_URL:-}', '${_MODELS}', 'default', '', 0, 1);
 ${_ABILITY_SQL}
 INSERT OR REPLACE INTO options (key, value) VALUES ('SelfUseModeEnabled', 'true');
+INSERT OR IGNORE INTO tokens (name, user_id, key, status, created_time, remain_quota, unlimited_quota) VALUES ('admin-token', 1, '${_ADMIN_TOKEN_KEY}', 1, ${_NOW}, ${_USER_QUOTA}, 0);
 "
 kubectl cp "$_TMP_DB" "system/${_NEWAPI_POD}:/data/one-api.db"
 rm -f "$_TMP_DB"
 kubectl rollout restart deployment/new-api -n system
 kubectl rollout status deployment/new-api -n system --timeout=60s
 
-# Auto-create admin token for portal to use
-_NEWAPI_POD2=$(kubectl get pod -n system -l app=new-api -o jsonpath='{.items[0].metadata.name}')
-_ADMIN_TOKEN=$(kubectl exec -n system "$_NEWAPI_POD2" -- \
-  sh -c 'sqlite3 /data/one-api.db "SELECT key FROM tokens WHERE name = '\''admin-token'\'' LIMIT 1"' 2>/dev/null || true)
+echo "New API admin token created: ${_ADMIN_TOKEN_KEY:0:10}..."
 
-if [ -z "$_ADMIN_TOKEN" ]; then
-  echo "Creating New API admin token..."
-  _ADMIN_TOKEN=$(kubectl exec -n system "$_NEWAPI_POD2" -- \
-    sh -c "sqlite3 /data/one-api.db \"INSERT INTO tokens (name, user_id, key, status, created_time, remain_quota, unlimited_quota) VALUES ('admin-token', 1, 'sk-admin-' || lower(hex(randomblob(16))), 1, $(date +%s), 500000000000, 0); SELECT key FROM tokens WHERE name='admin-token' LIMIT 1;\"")
-fi
+# Update portal secret with the admin token
+_JWT_SECRET=$(kubectl get secret talos-portal-secrets -n system -o jsonpath='{.data.jwt-secret}' 2>/dev/null | base64 -d 2>/dev/null || echo "")
+kubectl create secret generic talos-portal-secrets \
+  --from-literal=jwt-secret="${_JWT_SECRET:-$(openssl rand -hex 32)}" \
+  --from-literal=newapi-admin-token="${_ADMIN_TOKEN_KEY}" \
+  --from-literal=upstream-api-key="${UPSTREAM_API_KEY:-}" \
+  --from-literal=upstream-base-url="${UPSTREAM_BASE_URL:-}" \
+  --from-literal=sandbox-default-opus-model="${SANDBOX_DEFAULT_OPUS_MODEL:-}" \
+  --from-literal=sandbox-default-sonnet-model="${SANDBOX_DEFAULT_SONNET_MODEL:-}" \
+  --from-literal=sandbox-default-haiku-model="${SANDBOX_DEFAULT_HAIKU_MODEL:-}" \
+  --namespace system \
+  --dry-run=client -o yaml | kubectl apply -f -
 
-if [ -n "$_ADMIN_TOKEN" ]; then
-  # Update portal secret with the admin token
-  _JWT_SECRET=$(kubectl get secret talos-portal-secrets -n system -o jsonpath='{.data.jwt-secret}' 2>/dev/null | base64 -d 2>/dev/null || echo "")
-  kubectl create secret generic talos-portal-secrets \
-    --from-literal=jwt-secret="${_JWT_SECRET:-$(openssl rand -hex 32)}" \
-    --from-literal=newapi-admin-token="${_ADMIN_TOKEN}" \
-    --from-literal=upstream-api-key="${UPSTREAM_API_KEY:-}" \
-    --from-literal=upstream-base-url="${UPSTREAM_BASE_URL:-}" \
-    --from-literal=sandbox-default-opus-model="${SANDBOX_DEFAULT_OPUS_MODEL:-}" \
-    --from-literal=sandbox-default-sonnet-model="${SANDBOX_DEFAULT_SONNET_MODEL:-}" \
-    --from-literal=sandbox-default-haiku-model="${SANDBOX_DEFAULT_HAIKU_MODEL:-}" \
-    --namespace system \
-    --dry-run=client -o yaml | kubectl apply -f -
-  echo "New API admin token configured: ${_ADMIN_TOKEN:0:10}..."
-  # Restart portal to pick up the new secret
-  kubectl rollout restart deployment/talos-portal -n system
-else
-  echo "WARNING: Failed to create New API admin token. Portal will use session fallback."
-fi
+# Restart portal to pick up the new secret
+kubectl rollout restart deployment/talos-portal -n system
 
 echo "new-api initialized"
 

@@ -79,7 +79,7 @@ export async function upCommand(opts: { project: string }) {
   // Step 6: SSH
   console.log(`\n  ${BOLD}Connecting via SSH...${RESET}\n`);
   try {
-    sshIntoSandbox(port);
+    await sshIntoSandbox(port);
   } finally {
     cleanup();
   }

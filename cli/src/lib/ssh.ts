@@ -2,7 +2,7 @@ import fs from "fs";
 import net from "net";
 import path from "path";
 import os from "os";
-import { execSync, spawnSync } from "child_process";
+import { execSync, spawn } from "child_process";
 import WebSocket from "ws";
 import { getSshKeyPath, loadConfig, getPortalUrl } from "../config/index.js";
 import { api } from "../api/client.js";
@@ -177,21 +177,31 @@ export function updateSshConfig(project: string, port: number) {
 
 // ── SSH session ────────────────────────────────────────
 
-export function sshIntoSandbox(port: number) {
-  const sshKeyPath = getSshKeyPath();
-  const ssh = spawnSync(
-    "ssh",
-    [
-      "-p", String(port),
-      "-i", sshKeyPath,
-      "-o", "StrictHostKeyChecking=no",
-      "-o", "UserKnownHostsFile=/dev/null",
-      "coder@localhost",
-    ],
-    { stdio: "inherit" }
-  );
+export function sshIntoSandbox(port: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const sshKeyPath = getSshKeyPath();
+    const ssh = spawn(
+      "ssh",
+      [
+        "-p", String(port),
+        "-i", sshKeyPath,
+        "-o", "StrictHostKeyChecking=no",
+        "-o", "UserKnownHostsFile=/dev/null",
+        "coder@localhost",
+      ],
+      { stdio: "inherit" }
+    );
 
-  if (ssh.error) {
-    console.error("SSH failed:", ssh.error.message);
-  }
+    ssh.on("close", (code) => {
+      if (code && code !== 0) {
+        reject(new Error(`SSH exited with code ${code}`));
+      } else {
+        resolve();
+      }
+    });
+
+    ssh.on("error", (err) => {
+      reject(err);
+    });
+  });
 }

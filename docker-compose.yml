@@ -7,15 +7,18 @@ services:
       - JWT_SECRET=dev-secret-change-me
       - SANDBOX_MANAGER_URL=http://sandbox-manager:8081
       - NEWAPI_BASE=http://new-api:3000
+      - NEWAPI_ROOT_PASSWORD=12345678
       - ADMIN_EMAIL=admin@talos.dev
       - ADMIN_PASSWORD=admin
       - SANDBOX_NAMESPACE=sandbox-workspaces
       - SANDBOX_TEMPLATE=claude-workspace
+      - UPSTREAM_API_KEY=test
+      - UPSTREAM_BASE_URL=https://test.example.com
     volumes:
       - portal-data:/app/data
-      - new-api-data:/data/new-api:ro
     depends_on:
       - sandbox-manager
+      - new-api
 
   sandbox-manager:
     build: ./sandbox-manager
