@@ -130,6 +130,22 @@ async function verifySession(): Promise<void> {
   }
 
   console.log(`New API session verified (role=${role}, admin=true)`);
+
+  // Ensure user group is "default" to match channel group
+  const group = data.data?.group || "";
+  if (group !== "default") {
+    console.log(`Setting root user group to "default" (was "${group}")`);
+    const userId = data.data?.id;
+    if (userId) {
+      await withAdminAuth(async (headers) => {
+        await fetch(`${NEWAPI_BASE}/api/user/${userId}`, {
+          method: "PUT",
+          headers,
+          body: JSON.stringify({ group: "default" }),
+        });
+      });
+    }
+  }
 }
 
 /**
