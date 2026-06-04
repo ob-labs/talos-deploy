@@ -40,6 +40,15 @@ func main() {
 	h := &handler.SandboxHandler{Client: sc, Namespace: namespace}
 	h.Register(r)
 
+	// Print registered routes for debugging
+	walkFunc := func(method, route string, handler http.Handler, middlewares ...func(http.Handler) http.Handler) error {
+		log.Printf("  %s %s", method, route)
+		return nil
+	}
+	if err := chi.Walk(r, walkFunc); err != nil {
+		log.Printf("Error walking routes: %v", err)
+	}
+
 	addr := fmt.Sprintf(":%s", port)
 	log.Printf("Sandbox Manager listening on %s (namespace=%s, mode=%s)", addr, namespace, mode)
 	if err := http.ListenAndServe(addr, r); err != nil {
