@@ -161,6 +161,7 @@ export async function initNewApi(): Promise<void> {
 // ── Token CRUD ────────────────────────────────────────────
 
 export async function createToken(name: string, remainQuota: number = NEWAPI_USER_QUOTA): Promise<string> {
+  // Step 1: Create token
   const data = await withAdminAuth(async (headers) => {
     const resp = await fetch(`${NEWAPI_BASE}/api/token/`, {
       method: "POST",
@@ -172,28 +173,35 @@ export async function createToken(name: string, remainQuota: number = NEWAPI_USE
 
   if (!data.success) throw new Error(`New API createToken failed: ${data.message}`);
 
-  // The creation response should contain the full key
-  const key = data.data?.key || data.data?.token_key || data.key;
-  if (key && !key.includes("*")) {
-    return key;
+  // Creation response may include key directly (some versions)
+  if (data.data?.key && !data.data.key.includes("*")) {
+    return data.data.key;
   }
 
-  // Log what we got to diagnose format issues
-  console.warn(`createToken: creation response did not contain usable key, response keys: ${Object.keys(data.data || {}).join(",")}`);
-  console.warn(`createToken: full response (redacted): ${JSON.stringify(data).slice(0, 200)}`);
-
-  throw new Error("Token created but key not returned in response. Check new-api version compatibility.");
-}
-
-async function queryTokenKey(tokenName: string): Promise<string> {
-  const data = await withAdminAuth(async (headers) => {
-    const resp = await fetch(`${NEWAPI_BASE}/api/token/?name=${encodeURIComponent(tokenName)}`, { headers });
+  // Step 2: Find the token ID by name
+  const tokenId = await withAdminAuth(async (headers) => {
+    const resp = await fetch(`${NEWAPI_BASE}/api/token/?name=${encodeURIComponent(name)}`, { headers });
     return resp.json() as any;
   });
-  const items = Array.isArray(data.data) ? data.data : (data.data?.items ?? []);
-  const token = items.find((t: any) => t.name === tokenName);
-  if (token?.key) return token.key;
-  throw new Error(`Token "${tokenName}" not found via New API after creation`);
+
+  const items = Array.isArray(tokenId.data) ? tokenId.data : (tokenId.data?.items ?? []);
+  const token = items.find((t: any) => t.name === name);
+  if (!token?.id) throw new Error(`Token "${name}" not found after creation`);
+
+  // Step 3: Get full key via POST /api/token/{id}/key
+  const keyResp = await withAdminAuth(async (headers) => {
+    const resp = await fetch(`${NEWAPI_BASE}/api/token/${token.id}/key`, {
+      method: "POST",
+      headers,
+    });
+    return resp.json() as any;
+  });
+
+  if (!keyResp.success || !keyResp.data?.key) {
+    throw new Error(`Failed to get token key: ${keyResp.message || "unknown error"}`);
+  }
+
+  return keyResp.data.key;
 }
 
 export async function ensureUserApiKey(userId: number): Promise<string> {
