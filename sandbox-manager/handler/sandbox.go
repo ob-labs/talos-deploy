@@ -35,9 +35,9 @@ func (h *SandboxHandler) Register(r chi.Router) {
 	r.Get("/sandboxes/{name}/status", h.GetStatus)
 	r.Get("/sandboxes/{name}/pod", h.GetPod)
 	r.Get("/sandboxes/{name}/ssh", h.SSHRelay)
-	r.Delete("/sandboxes/{name}", h.Delete)
 	r.Post("/sandboxes/{name}/env", h.InjectEnv)
 	r.Post("/sandboxes/{name}/wake", h.Wake)
+	r.Delete("/sandboxes/{name}", h.Delete) // must be last — {name} is greedy
 	r.Get("/health", h.Health)
 }
 

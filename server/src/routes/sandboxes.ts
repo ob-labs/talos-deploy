@@ -70,15 +70,23 @@ export async function sandboxRoutes(app: FastifyInstance) {
     // ── Step 3: Handle existing sandbox ──
     const existing = findSandboxByUserAndProject(userId, project);
     if (existing) {
-      touchSandbox(existing.id);
-      if (existing.status === "sleeping") {
-        // Wake with progress tracking (pod will be recreated → env re-injected)
-        const operationId = registerOperation(existing.id);
-        runSandboxWake(operationId, existing.sandboxclaim_name, existing.id, userId);
-        return { sandbox: findSandboxById(existing.id), operationId };
+      // Verify the sandbox claim still exists in k8s — it may have been deleted externally
+      const claimExists = await checkSandboxClaimExists(existing.sandboxclaim_name);
+      if (!claimExists) {
+        console.log(`Sandbox claim ${existing.sandboxclaim_name} not found in k8s, recreating`);
+        deleteSandboxDb(existing.id);
+        // Fall through to create a new sandbox below
+      } else {
+        touchSandbox(existing.id);
+        if (existing.status === "sleeping") {
+          // Wake with progress tracking (pod will be recreated → env re-injected)
+          const operationId = registerOperation(existing.id);
+          runSandboxWake(operationId, existing.sandboxclaim_name, existing.id, userId);
+          return { sandbox: findSandboxById(existing.id), operationId };
+        }
+        // Already active — env is already injected in the pod, no need to re-inject
+        return { sandbox: findSandboxById(existing.id) };
       }
-      // Already active — env is already injected in the pod, no need to re-inject
-      return { sandbox: findSandboxById(existing.id) };
     }
 
     // ── Step 4: Create new sandbox with progress tracking ──
@@ -88,6 +96,19 @@ export async function sandboxRoutes(app: FastifyInstance) {
     runSandboxInit(operationId, claimName, sandbox.id, userId);
     return { sandbox, operationId };
   });
+
+/**
+ * Check if a sandbox claim still exists in k8s via the Sandbox Manager.
+ */
+async function checkSandboxClaimExists(claimName: string): Promise<boolean> {
+  try {
+    const smUrl = process.env.SANDBOX_MANAGER_URL || "http://localhost:8081";
+    const resp = await fetch(`${smUrl}/sandboxes/${encodeURIComponent(claimName)}/status`);
+    return resp.ok;
+  } catch {
+    return false;
+  }
+}
 
   app.get("/api/sandboxes", { preHandler: authMiddleware }, async (request) => {
     const project = (request.query as any)?.project;
