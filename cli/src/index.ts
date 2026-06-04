@@ -5,9 +5,9 @@ import { upCommand } from "./commands/up.js";
 
 const program = new Command();
 program
-  .name("tt")
-  .description("Talos Portal CLI — sandbox environments for Claude Code")
-  .version("0.2.0");
+  .name("talosd")
+  .description("Talos Deploy CLI — sandbox environments for Claude Code")
+  .version("0.1.0");
 
 // ── auth ──────────────────────────────────────────────────
 
@@ -42,7 +42,7 @@ authCmd
     authLogoutCommand();
   });
 
-// Backward compat: `tt login` → `tt auth login`
+// Backward compat: `talosd login` → `talosd auth login`
 program
   .command("login")
   .description("Login via browser (alias for auth login)")

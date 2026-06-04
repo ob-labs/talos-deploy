@@ -1,14 +1,22 @@
 {
-  "name": "tt",
-  "version": "0.2.0",
-  "private": true,
+  "name": "talos-deploy",
+  "version": "0.1.0",
+  "description": "Talos Deploy CLI — sandbox environments for Claude Code",
+  "type": "module",
   "bin": {
-    "tt": "./dist/index.js"
+    "talosd": "./dist/index.js"
   },
+  "files": ["dist/"],
   "scripts": {
     "dev": "tsx src/index.ts",
-    "build": "tsc && chmod +x dist/index.js"
+    "build": "tsc && chmod +x dist/index.js",
+    "prepublishOnly": "npm run build"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ob-labs/talos-deploy"
+  },
+  "license": "MIT",
   "dependencies": {
     "commander": "^12.0.0",
     "dotenv": "^17.4.2",
