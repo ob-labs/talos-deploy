@@ -1,4 +1,4 @@
-name: Build and Push
+name: Build, Push and Deploy
 
 on:
   push:
@@ -44,3 +44,30 @@ jobs:
           docker buildx build --platform linux/amd64 --push \
             -t $REGISTRY/sandbox-manager:$IMAGE_TAG \
             ./sandbox-manager
+
+  deploy:
+    needs: build
+    runs-on: [self-hosted, ecs]
+    environment: production
+    env:
+      REGISTRY: ${{ vars.REGISTRY }}
+      IMAGE_TAG: ${{ github.event.inputs.image_tag || 'latest' }}
+      KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sync runtime secrets
+        env:
+          UPSTREAM_API_KEY: ${{ secrets.UPSTREAM_API_KEY }}
+        run: |
+          if [ -n "$UPSTREAM_API_KEY" ]; then
+            JWT=$(k3s kubectl get secret talos-portal-secrets -n system \
+              -o jsonpath='{.data.jwt-secret}' | base64 -d)
+            k3s kubectl create secret generic talos-portal-secrets \
+              --from-literal=jwt-secret="$JWT" \
+              --from-literal=upstream-api-key="$UPSTREAM_API_KEY" \
+              --namespace system --dry-run=client -o yaml | k3s kubectl apply -f -
+          fi
+
+      - name: Deploy to k3s
+        run: bash scripts/deploy-remote.sh
